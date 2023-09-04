@@ -8,37 +8,19 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
 // Load your Google Sheets credentials and spreadsheetId
-const keyFile = process.env.GOOGLE_SHEETS_KEY_FILE;
-const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+const keyFile = "credentials.json";
+const spreadsheetId = "1t0rGpjn8iEZhzbILGEoycWec83jAX0Lj7IjyydUtRlU";
 let currentWordIndex = 0; // To track the index of the current word
 
 app.get("/", async (req, res) => {
     try {
-        // Create Google Sheets authentication
-        const auth = new google.auth.GoogleAuth({
-            keyFile,
-            scopes: "https://www.googleapis.com/auth/spreadsheets",
-        });
-
-        // Create client instance for authentication
-        const client = await auth.getClient();
-
-        // Create an instance of Google Sheets API
-        const sheets = google.sheets({ version: "v4", auth: client });
-
-        // Fetch values starting from cells A2 and B2
-        const response = await sheets.spreadsheets.values.batchGet({
-            spreadsheetId,
-            ranges: ["Sheet1!A2:B"], // Modify the sheet name and cell references as needed
-        });
-
-        // Extract the values from the response
-        const values = response.data.valueRanges[0].values;
+        // Fetch word data from the serverless function
+        const response = await fetchWordFromServerlessFunction(currentWordIndex);
 
         // If there are available words, select the current word
         let word = "No more words to show.";
-        if (values && currentWordIndex < values.length) {
-            word = values[currentWordIndex][0]; // Assuming words are in column A
+        if (response && response.word) {
+            word = response.word;
         }
 
         res.render("index", { word });
@@ -76,6 +58,7 @@ app.post("/", async (req, res) => {
         // Increment the current word index to move to the next word
         currentWordIndex++;
 
+        // Redirect back to the homepage
         res.redirect("/");
     } catch (error) {
         console.error(error);
@@ -86,3 +69,16 @@ app.post("/", async (req, res) => {
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
+
+async function fetchWordFromServerlessFunction(index) {
+    try {
+        const response = await fetch(`/api/sheets?index=${index}`);
+        if (!response.ok) {
+            throw new Error("Failed to fetch word from serverless function.");
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
+}
